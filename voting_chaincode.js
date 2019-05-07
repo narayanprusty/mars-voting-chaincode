@@ -100,11 +100,12 @@ var Chaincode = class {
 
     let userId = args[0];
     let votingPhaseId = args[1];
+    let identityChannelName = args[2]
 
     let result = await stub.invokeChaincode('identity', [
       Buffer.from('getIdentity'),
       Buffer.from(userId)
-    ])
+    ], identityChannelName)
 
     if(result.status !== 200) {
       throw new Error('Internal transaction failed');
