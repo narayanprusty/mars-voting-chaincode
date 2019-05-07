@@ -50,10 +50,14 @@ var Chaincode = class {
     let id = args[0]
     let votingPhase = {status: 'open', parties: {}, votes: {}}
 
-    if(!(await stub.getState(`vp_${id}`)).toString()) {
-      await stub.putState(`vp_${id}`, Buffer.from(JSON.stringify(votingPhase)))
+    if((await stub.getState('votingAuthority')).toString() === stub.getCreator().mspid) {
+      if(!(await stub.getState(`vp_${id}`)).toString()) {
+        await stub.putState(`vp_${id}`, Buffer.from(JSON.stringify(votingPhase)))
+      } else {
+        throw new Error('Voting phase already exists');
+      }
     } else {
-      throw new Error('Voting phase already exists');
+      throw new Error('You don\'t have permission to add voting phase');
     }
   }
 
