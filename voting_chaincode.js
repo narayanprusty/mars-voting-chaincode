@@ -76,7 +76,7 @@ var Chaincode = class {
   }
 
   async vote(stub, args) {
-    if (args.length < 2) {
+    if (args.length < 3) {
       throw new Error('Incorrect number of arguments. ');
     }
 
