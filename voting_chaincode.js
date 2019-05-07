@@ -1,6 +1,6 @@
 const shim = require('fabric-shim');
-const ethGSV = require('ethereum-gen-sign-verify');
 var ab2str = require('arraybuffer-to-string')
+const EthCrypto = require('eth-crypto');
 
 var Chaincode = class {
 
@@ -82,12 +82,7 @@ var Chaincode = class {
 
     let secretData = stub.getTransient(); 
    
-    let signature = {
-      r: new Buffer(secretData.get('signature_r').toBuffer().toString('base64'), 'base64').toString('utf8'), 
-      s: new Buffer(secretData.get('signature_s').toBuffer().toString('base64'), 'base64').toString('utf8'), 
-      v: new Buffer(secretData.get('signature_v').toBuffer().toString('base64'), 'base64').toString('utf8') 
-    };
-
+    let signature = new Buffer(secretData.get('signature').toBuffer().toString('base64'), 'base64').toString('utf8')
 
     let message = {
       action: 'vote', 
@@ -117,9 +112,12 @@ var Chaincode = class {
       throw new Error('Permission invalid');
     }
 
-    let isValid = ethGSV.verify(JSON.stringify(message), signature, publicKey);
+    const signer = EthCrypto.recover(
+      signature,
+      EthCrypto.hash.keccak256(JSON.stringify(message))
+    );
 
-    if(!isValid) {
+    if(signer !== publicKey) {
       throw new Error('Signature invalid');
     }
 
