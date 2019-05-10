@@ -8,11 +8,9 @@ import (
 	"github.com/hyperledger/fabric/protos/msp"
 	"github.com/golang/protobuf/proto"
 	"github.com/hyperledger/fabric/common/util"
-	"crypto"
-  "crypto/rsa"
-  "crypto/x509"
-  "encoding/base64"
-	"encoding/pem"
+	"github.com/decred/dcrd/dcrec/secp256k1"
+	"encoding/hex"
+	"crypto/sha256"
 	"strconv"
 )
 
@@ -32,21 +30,21 @@ func (t *VotingChaincode) Init(stub shim.ChaincodeStubInterface) pb.Response {
 	identity, err = stub.GetCreator()
 	
 	if err != nil {
-		return shim.Error("An error occured")
+		return shim.Error(err.Error())
 	}
 
 	sId := &msp.SerializedIdentity{}
 	err = proto.Unmarshal(identity, sId)
 	
 	if err != nil {
-			return shim.Error("An error occured")
+			return shim.Error(err.Error())
 	}
 
 	nodeId := sId.Mspid
 	err = stub.PutState("votingAuthority", []byte(nodeId))
 
 	if err != nil {
-		return shim.Error("An error occured")
+		return shim.Error(err.Error())
 	}
 
 	return shim.Success(nil)
@@ -69,7 +67,7 @@ func (t *VotingChaincode) getCreatorIdentity(stub shim.ChaincodeStubInterface, a
 	identity, err := stub.GetState("votingAuthority")
 
 	if err != nil {
-		return shim.Error("An error occured")
+		return shim.Error(err.Error())
 	}
 
 	if identity == nil {
@@ -91,14 +89,14 @@ func (t *VotingChaincode) getVotes(stub shim.ChaincodeStubInterface, args []stri
 	votes, err := stub.GetState(to)
 
 	if err != nil {
-		return shim.Error("An error occured while reading votes")
+		return shim.Error(err.Error())
 	}
 
 	return shim.Success(votes)
 }
 
 func (t *VotingChaincode) vote(stub shim.ChaincodeStubInterface, args []string) pb.Response {
-	if len(args) != 2 {
+	if len(args) != 3 {
 		return shim.Error("Incorrect number of arguments.")
 	}
 
@@ -109,11 +107,9 @@ func (t *VotingChaincode) vote(stub shim.ChaincodeStubInterface, args []string) 
 	tMap, err := stub.GetTransient()
 
 	to := string(tMap["to"])
-	signature := tMap["signature"]
-	signature, err = base64.StdEncoding.DecodeString(string(signature))
 
 	if err != nil {
-		return shim.Error("An error occured")
+		return shim.Error(err.Error())
 	}
 
 	identityChannelName := args[1]
@@ -121,14 +117,14 @@ func (t *VotingChaincode) vote(stub shim.ChaincodeStubInterface, args []string) 
 	identity, err := stub.GetCreator()
 
 	if err != nil {
-		return shim.Error("An error occured")
+		return shim.Error(err.Error())
 	}
 
 	sId := &msp.SerializedIdentity{}
 	err = proto.Unmarshal(identity, sId)
 	
 	if err != nil {
-		return shim.Error("An error occured")
+		return shim.Error(err.Error())
 	}
 
 	votingAuthority, err := stub.GetState("votingAuthority")
@@ -148,7 +144,7 @@ func (t *VotingChaincode) vote(stub shim.ChaincodeStubInterface, args []string) 
 	votes, err := stub.GetState(to)
 
 	if err != nil {
-		return shim.Error("An error occured while fetching votes")
+		return shim.Error(err.Error())
 	}
 
 	if votes == nil {
@@ -158,7 +154,7 @@ func (t *VotingChaincode) vote(stub shim.ChaincodeStubInterface, args []string) 
 	count, err := strconv.Atoi(string(votes))
 
 	if err != nil {
-		return shim.Error("An error occured ")
+		return shim.Error(err.Error())
 	}
 
 	chainCodeArgs := util.ToChaincodeArgs("getIdentity", user)
@@ -175,55 +171,52 @@ func (t *VotingChaincode) vote(stub shim.ChaincodeStubInterface, args []string) 
 		return shim.Error("User struct creation failed")
 	}
 
-	userPublicKey, err := base64.StdEncoding.DecodeString(userStruct.PublicKey)
-
-	fmt.Printf("Message: %s", string(userStruct.PublicKey))
-
-	block, _ := pem.Decode(userPublicKey)
-
-	if block == nil {
-    return shim.Error("Pem decoded")
+	pubKeyBytes, err := hex.DecodeString(userStruct.PublicKey)
+	if err != nil {
+		return shim.Error(err.Error())
 	}
-	
-	userPublicKeyObj, err := x509.ParsePKIXPublicKey(block.Bytes)
+
+	pubKey, err := secp256k1.ParsePubKey(pubKeyBytes)
+	if err != nil {
+		return shim.Error(err.Error())
+	}
+
+	sigBytes, err := hex.DecodeString(args[2])
 
 	if err != nil {
-		return shim.Error("Public key invalid")
+		return shim.Error(err.Error())
+	}
+
+	signature, err := secp256k1.ParseDERSignature(sigBytes)
+	if err != nil {
+		return shim.Error(err.Error())
 	}
 
 	message := []byte("{\"action\":\"vote\",\"to\":\"" + to + "\"}")
 
-	fmt.Printf("Message: %s", string(message))
-
-	newhash := crypto.SHA256
-  pssh := newhash.New()
-  pssh.Write(message)
-	hashed := pssh.Sum(nil)
+	messageHash := sha256.Sum256([]byte(message))
+	verified := signature.Verify(messageHash[:], pubKey)
 	
-	rsaPublickey, _ := userPublicKeyObj.(*rsa.PublicKey)
-	
-	err = rsa.VerifyPKCS1v15(rsaPublickey, crypto.SHA256, hashed, signature)
+	if (verified) {
+		count++
 
-	if err != nil {
-		return shim.Error("Signature invalid")
+		fmt.Printf("New votes: %s", count)
+	
+		err = stub.PutState(to, []byte(strconv.Itoa(count)))
+	
+		if err != nil {
+			return shim.Error(err.Error())
+		}
+	
+		err = stub.PutState("voted_" + user, []byte("true"))
+	
+		if err != nil {
+			return shim.Error(err.Error())
+		}		
+	} else {
+		return shim.Error("Invalid signature")
 	}
 
-	count++
-
-	fmt.Printf("New votes: %s", count)
-
-	err = stub.PutState(to, []byte(strconv.Itoa(count)))
-
-	if err != nil {
-		return shim.Error("An error occured while writing votes")
-	}
-
-	err = stub.PutState("voted_" + user, []byte("true"))
-
-	if err != nil {
-		return shim.Error("An error occured while writing state")
-	}
-	
 	return shim.Success(nil)
 }
 

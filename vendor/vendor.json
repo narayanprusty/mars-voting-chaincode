@@ -21,6 +21,12 @@
 			"revision": ""
 		},
 		{
+			"checksumSHA1": "IUljYz3ElTtdgHiKD7aCXRjU9S8=",
+			"path": "github.com/decred/dcrd/dcrec/secp256k1",
+			"revision": "70c14042d8376bc461a0c1acf424a6b5486aa18b",
+			"revisionTime": "2019-04-29T19:41:06Z"
+		},
+		{
 			"checksumSHA1": "hAjf49/v5dubqbUaCu7mE9/7VVA=",
 			"origin": "github.com/hyperledger/fabric/vendor/github.com/docker/docker/api/types",
 			"path": "github.com/docker/docker/api/types",
@@ -813,6 +819,11 @@
 			"checksumSHA1": "H+7ILyKenIGyDkCvI8NdZ42OWiI=",
 			"origin": "github.com/hyperledger/fabric/vendor/gopkg.in/yaml.v2",
 			"path": "gopkg.in/yaml.v2",
+			"revision": ""
+		},
+		{
+			"checksumSHA1": "nfhm43BMGm9fHtdjzoXNX7GVBBs=",
+			"path": "strconv",
 			"revision": ""
 		}
 	],
